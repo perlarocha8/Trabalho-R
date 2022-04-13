@@ -1,0 +1,271 @@
+---
+title: "Trabalho A1"
+author: "Perla Rocha, Jonathan Henrique dos Santos e Lucas Lima"
+date: '2022-04-12'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Dash Mercado Financeiro
+
+Nesta primeira etapa do trabalho, vamos apresentar a base de dados escolhida até o momento: a curva da estrutura a termo da taxa de juros, a cotação diária do dólar, o Ibovespa e a curva do CDS.
+
+A fonte de nossos dados são tabelas extraídas da MCM Consultores Associados, do banco de dados do BCB e do Yahoo Finance.
+
+```{r entrada, include = FALSE}
+library(ggplot2)
+library(readr)
+library(sidrar)
+library(rbcb)
+library("readxl")
+library(dplyr)
+library(magrittr)
+library(tidyr)
+library(corrplot)
+library(readxl)
+library(quantmod)
+
+```
+
+**Estrutura a termo da taxa de juros**
+
+A Estrutura a termo de taxa de juros é a relação, em dado momento, entre taxas de juros de títulos de renda-fixa de mesma qualidade creditícia, mas com diferentes prazos de vencimento. A Yield Curve geralmente é construída a partir de títulos que pagam juros somente no vencimento, ou seja, os zero coupon bonds.
+
+```{r juros, include = FALSE}
+#curva de juros para o último dia
+ettj1 <- read_excel(path = "MFIETTJ0.xls",
+                    sheet = "ETTJ", range = "A12:X3149", col_names = T) 
+ettj1 <- ettj1 %>% slice(which.max(ettj1$`...1`)) 
+ettj1 <- ettj1 %>% gather(date,"Hoje")
+ettj1 <- ettj1[-1,]
+#curva de juros para 1 mês atrás
+ettj2 <- read_excel(path = "MFIETTJ0.xls",
+                    sheet = "ETTJ", range = "A12:X3131", col_names = T) 
+ettj2 <- ettj2 %>% slice(which.max(`...1`)) 
+ettj2 <- ettj2 %>% gather(date,variable ) 
+ettj2 <- ettj2[-1,-1]
+#curva de juros para 2 meses atrás
+ettj3 <- read_excel(path = "MFIETTJ0.xls",
+                    sheet = "ETTJ", range = "A12:X3110", col_names = T) 
+ettj3 <- ettj3 %>% slice(which.max(`...1`)) 
+ettj3 <- ettj3 %>% gather(date,variable ) 
+ettj3 <- ettj3[-1,-1]
+#curva de juros para 3 meses atrás
+ettj4 <- read_excel(path = "MFIETTJ0.xls",
+                    sheet = "ETTJ", range = "A12:X3087", col_names = T) 
+ettj4 <- ettj4 %>% slice(which.max(`...1`)) 
+ettj4 <- ettj4 %>% gather(date,variable )
+ettj4 <- ettj4[-1,-1]
+
+#total: juntar todas em um só dataframe
+ettj_total <- data.frame(ettj1, ettj2, ettj3, ettj4)
+colnames(ettj_total)[3] <- 'Há 1 mês'
+colnames(ettj_total)[4] <- 'Há 2 meses'
+colnames(ettj_total)[5] <- 'Há 3 meses'
+#número de semanas para cada vértice da curva
+d <- c("1","2","3","6","12"
+       ,"18","24","30","36","42"
+       ,"48","54","60","66"
+       ,"72","78","84","90",
+       "96","102","108","114",
+       "120" )
+s <- seq(1,nrow(ettj_total), by =1) #enumerar linhas para auxiliar o plot
+ettj_total$s <- s
+curva_de_juros <- ettj_total %>% 
+  ggplot() +
+  geom_line(aes(x = s,y = Hoje , color = "Hoje"), size = 1) +
+  geom_line(aes(x = s,y = `Há 1 mês`, color = "Há 1 mês"), size = 1) +
+  geom_line(aes(x = s,y = `Há 2 meses`, color = "Há 2 meses"), size = 1) +
+  geom_line(aes(x = s,y = `Há 3 meses`, color = "Há 3 meses"), size = 1) +
+  scale_color_manual(values = c('Hoje' = "black", "Há 1 mês" = "red", "Há 2 meses" = "green",
+                                "Há 3 meses" = "blue")) +
+  theme_minimal() + scale_x_discrete(breaks = 1:nrow(ettj_total), 
+                    labels=d)+
+   labs(x = element_blank(), y = element_blank(), 
+        title = "Estrutura a termo da taxa de juros", subtitle = "Juros de 1 mês a 10 anos" ) +
+   theme(plot.title = element_text(color="black", size=15, face="bold.italic"),
+         axis.text.x = element_text(size = 14, colour = "black"), 
+         axis.text.y = element_text(size = 14, colour = "black"),legend.position = "bottom",
+         legend.title = element_text(color = "blue", size = 1),
+         legend.text = element_text(color = "black", size = 14))
+```
+
+```{r}
+plot(curva_de_juros)
+```
+
+**Dólar**
+
+A economia brasileira é fortemente influenciada pela flutuação da moeda americana. Por isso, é de suma importância o acompanhamento dessa variável.
+
+```{r, include=FALSE}
+# Dólar
+dol <- rbcb::get_series(c("Dólar" = 1), last = 120, as = "data.frame")
+dol <- dol[-69,]
+dol <- dol[-64,]
+
+#ponto para auxiliar marcação no gráfico
+ponto <- as.data.frame(tail(dol,n=1))  
+
+cotacao_dolar <- dol %>% 
+  ggplot() +
+  geom_line(aes(x = date,y = Dólar , color = "Hoje"), size = 1) +
+  scale_color_manual(values = c('Dólar' = "black")) +
+  theme_minimal() +
+  labs(x = element_blank(), y = element_blank(), 
+       title = "Cotação Dólar", subtitle = "Dados diários" ) +
+  theme(plot.title = element_text(color="black", size=15, face="bold.italic"),
+        axis.text.x = element_text(size = 14, colour = "black"), 
+        axis.text.y = element_text(size = 14, colour = "black"),legend.position = "bottom",
+        legend.title = element_text(color = "blue", size = 1),
+        legend.text = element_text(color = "black", size = 14)) +
+  geom_text(data=ponto, 
+            aes(x=as.Date(date), y=Dólar,
+                label = sprintf("%0.1f", Dólar ), 
+                vjust= 1.1), size=4.5, color="black", position = position_dodge(width = 10))
+
+```
+
+```{r}
+plot(cotacao_dolar)
+```
+
+**IBOVESPA**
+
+O Ibovespa é o principal indicador de desempenho das ações negociadas na B3 e reúne as empresas mais importantes do mercado de capitais brasileiro. Foi criado em 1968 e, ao longo desses 50 anos, consolidou-se como referência para investidores ao redor do mundo.
+
+Reavaliado a cada quatro meses, o índice é resultado de uma carteira teórica de ativos. É composto pelas ações e units de companhias listadas na B3 que atendem aos critérios descritos na sua metodologia, correspondendo a cerca de 80% do número de negócios e do volume financeiro do nosso mercado de capitais.
+
+```{r, include=FALSE}
+#Ibovespa
+env <- new.env()
+options("getSymbols.warning4.0"=FALSE)
+getSymbols("^BVSP",src="yahoo", 
+           env=env,
+           from=as.Date('2021-09-23'));
+ibov <- env$BVSP[,4]
+ibov$datas <- 1:nrow(ibov)
+ibov$datas <- index(ibov)
+
+#ponto para auxiliar marcação no gráfico
+ponto2 <-as.data.frame(tail(ibov,n=1))  
+
+ibov_diario <- ibov %>% 
+  ggplot() +
+  geom_line(aes(x = datas,y = BVSP.Close , color = "Ibovespa"), size = 1) +
+  scale_color_manual(values = c('Ibovespa' = "blue")) +
+  theme_minimal() +
+  labs(x = element_blank(), y = element_blank(), 
+       title = "IBOVESPA", subtitle = "Dados diários" ) +
+  theme(plot.title = element_text(color="black", size=15, face="bold.italic"),
+        axis.text.x = element_text(size = 14, colour = "black"), 
+        axis.text.y = element_text(size = 14, colour = "black"),
+        legend.position = "bottom",
+        legend.title = element_text(color = "blue", size = 1),
+        legend.text = element_text(color = "black", size = 14)) +
+  geom_text(data=ponto2, 
+            aes(x = datas, y=BVSP.Close,
+                label = sprintf("%0.1f", BVSP.Close ), 
+                vjust= 1.1), size=4.5, color="black", position = position_dodge(width = 10))
+```
+
+```{r}
+plot(ibov_diario)
+```
+
+**Credit Default Swap**
+
+Um CDS é um contrato de swap que remunera o portador quando ocorre o default da instituição especificada no contrato. Ou seja, caso a instituição específica não pague suas obrigações, o emitidor do CDS terá que pagar o valor dessas obrigações ao portador. Portanto, o preço de um CDS está relacionado com a probabilidade dessa instituição não pagar as suas dívidas. Quanto maior o risco de crédito dessa insituição, maior o valor do CDS, quanto menor o risco de crédito dessa instituição, menor o valor do CDS.
+
+```{r,  include=FALSE}
+cds <- read_excel(path = "MFICDS0.xlsx",
+                  sheet = "CDS", range = "A5532:H5602", col_names = F) 
+cds <- cds %>% dplyr::rename(date = `...1`, Brasil = `...8`) 
+cds <- cds %>% select(date, Brasil) 
+cds$date <- as.Date(cds$date)
+#ponto para auxiliar marcação no gráfico
+ponto3 <-as.data.frame(tail(cds,n=1))  
+
+cds_plot <- cds %>% 
+  ggplot() +
+  geom_line(aes(x = date,y = Brasil , color = "cds"), size = 1) +
+  scale_color_manual(values = c('cds' = "red")) +
+  theme_minimal() +
+  labs(x = element_blank(), y = element_blank(), 
+       title = "Credit Default Swap", subtitle = "Dados diários" ) +
+  theme(plot.title = element_text(color="black", size=15, face="bold.italic"),
+        axis.text.x = element_text(size = 14, colour = "black"), 
+        axis.text.y = element_text(size = 14, colour = "black"),
+        legend.position = "bottom",
+        legend.title = element_text(color = "blue", size = 1),
+        legend.text = element_text(color = "black", size = 14)) +
+  geom_text(data=ponto3, 
+            aes(x=as.Date(date), y=Brasil,
+                label = sprintf("%0.1f", Brasil ), 
+                vjust= 1.1), size=4.5, color="black", position = position_dodge(width = 10))
+
+```
+
+```{r}
+plot(cds_plot)
+```
+
+**Bolsas Americanas**
+
+O S&P 500 é um reconhecido índice de referência para ações large cap dos Estados Unidos. O índice procura medir as 500 principais empresas e representa aproximadamente 80% da capitalização de mercado do mercado de valores dos EUA.
+
+O S&P 500 e o Índice Bovespa (Ibovespa) são amplamente considerados como os principais indicadores de desempenho dos mercados de valores dos EUA e do Brasil, respectivamente. Ambos os índices têm sido usados normalmente como benchmarks para o investimento em ações ou fundos de renda variável domésticos.
+
+Já o Nasdaq é um mercado de ações automatizado norte-americano onde estão listadas mais de 2 800 ações de diferentes empresas, em sua maioria de pequena e média capitalização. É o segundo maior mercado de ações em capitalização de mercado do mundo, depois da Bolsa de Nova York. Sua principal característica é que reune empresas de alta tecnologia em eletrônica, informática, telecomunicações, biotecnologia, e outras áreas similares.
+
+```{r, include=FALSE}
+#S&P500 
+env <- new.env()
+options("getSymbols.warning4.0"=FALSE)
+getSymbols("^GSPC",src="yahoo", 
+           env=env,
+           from=as.Date('2021-09-23'));
+
+sep500 <- env$GSPC[,4]
+sep500$datas <- 1:nrow(sep500)
+sep500$datas <- index(sep500)
+
+#Nasdaq 
+env <- new.env()
+options("getSymbols.warning4.0"=FALSE)
+getSymbols("^IXIC",src="yahoo", 
+           env=env,
+           from=as.Date('2021-09-23'));
+
+nasdaq <- env$IXIC[,4]
+
+#juntar em um dataframe úncio
+bolsas <- as_data_frame(sep500,nasdaq)
+
+#ponto para auxiliar marcação no gráfico
+ponto4 <-as.data.frame(tail(bolsas,n=1))  
+
+bolsas_diario <- bolsas %>% 
+  ggplot() +
+  geom_line(aes(x = datas,y = GSPC.Close , color = "BolsaUS"), size = 1) +
+  geom_line(aes(x = datas,y = nasdaq$IXIC.Close , color = "Nasdaq"), size = 1) +
+  scale_color_manual(values = c('BolsaUS' = "blue", 'Nasdaq' = "black")) +
+  theme_minimal() +
+  labs(x = element_blank(), y = element_blank(), 
+       title = "Bolsas Americanas", subtitle = "Dados diários de S&P500 e Nasdaq" ) +
+  theme(plot.title = element_text(color="black", size=15, face="bold.italic"),
+        axis.text.x = element_text(size = 14, colour = "black"), 
+        axis.text.y = element_text(size = 14, colour = "black"),
+        legend.position = "bottom",
+        legend.title = element_text(color = "blue", size = 1),
+        legend.text = element_text(color = "black", size = 14))
+```
+
+```{r}
+plot(bolsas_diario)
+```
